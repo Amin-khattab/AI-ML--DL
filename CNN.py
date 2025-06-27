@@ -24,10 +24,10 @@ test_set = test_datagen.flow_from_directory("dataset/test_set",
 
 cnn = tf.keras.models.Sequential()
 
-cnn.add(keras.layers.Conv2D(kernel_size=3, filters=35, activation="relu", input_shape=[64, 64, 3]))
+cnn.add(keras.layers.Conv2D(kernel_size=3, filters=32, activation="relu", input_shape=[64, 64, 3]))
 cnn.add(keras.layers.MaxPool2D(pool_size=2, strides=2))
 
-cnn.add(keras.layers.Conv2D(kernel_size=3, filters=35, activation="relu"))
+cnn.add(keras.layers.Conv2D(kernel_size=3, filters=32, activation="relu"))
 cnn.add(keras.layers.MaxPool2D(pool_size=2, strides=2))
 
 cnn.add(keras.layers.Flatten())
@@ -36,7 +36,7 @@ cnn.add(keras.layers.Dense(units=128, activation="relu"))
 cnn.add(keras.layers.Dense(units=1, activation="sigmoid"))
 
 cnn.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
-cnn.fit(x=train_set, validation_data=test_set, epochs=32)
+cnn.fit(x=train_set, validation_data=test_set, epochs=25)
 
 test_image_1 = image.load_img("dataset/single_prediction/dog.jpg", target_size=(64, 64))
 test_image_1 = image.img_to_array(test_image_1)
