@@ -1,46 +1,66 @@
-import tensorflow
+import keras
+import tensorflow as tf
+from tensorflow.keras import layers,models,mixed_precision
+from tensorflow.keras.applications import ResNet50V2
+from tensorflow.keras.callbacks import EarlyStopping,ReduceLROnPlateau
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from keras.datasets import cifar10
-from keras.models import Model
-from keras.layers import Lambda,GlobalAveragePooling2D,Dense,Input
-from keras.applications import ResNet50 , preprocess_input
-from keras.utils import to_categorical
-from keras import mixed_precision
-import numpy as np
 
-mixed_precision.set_global_policy('mixed_float16')
-
-BATCH_SIZE = 256
-EPOCH = 10
+policy = mixed_precision.Policy("mixed_bfloat16")
+mixed_precision.set_global_policy(policy)
 
 (x_train,y_train),(x_test,y_test) = cifar10.load_data()
-x_train = x_train.astype("float32")
-x_test = x_test.astype("float32")
 
-y_train = to_categorical(y_train,10)
-y_test = to_categorical(y_test,10)
+train_datagen = ImageDataGenerator(
+    rescale=1/255,
+    horizontal_flip=True,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    fill_mode="nearest",
+    rotation_range=10
+)
 
-x_train = preprocess_input(x_train)
-x_test = preprocess_input(x_test)
+test_datagen = ImageDataGenerator(rescale=1/255)
 
-input_tensor = Input(shape=(32,32,3))
-resized_image = Lambda(lambda image :tensorflow.image.resize(image,(96,96)))(input_tensor)
-base_model = ResNet50(weights="imagenet", include_top=False,input_tensor=resized_image)
-for layer in base_model.layers:
-    layer.trainable = False
+train_set = train_datagen.flow(x_train,y_train,batch_size=64)
+test_set = test_datagen.flow(x_test,y_test,batch_size=64)
 
-x = base_model.output
-x = GlobalAveragePooling2D()(x)
-x = Dense(256,activation="relu")(x)
+def build_pretrained_resnet():
+    input_tensor = layers.Input(shape=(32,32,3))
 
-predictions = Dense(10,activation="softmax", dtype="float32")(x)
+    x = layers.UpSampling2D(size=(3,3))(input_tensor)
 
-model = Model(input_tensor = input_tensor,outputs = predictions)
+    base_model = ResNet50V2(include_top=False,weights="imagenet",input_tensor=x)
+    base_model.trainable = False
 
-model.compile(optimizer="adam",loss = "categorical_crossentropy", metrics=["accuracy"])
+    x = base_model.outputs
+    x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dense(units=256,activation="relu")(x)
+    x = layers.Dropout(0.3)(x)
 
-print("4. Saving Model...")
-model.save('cifar10_godmode.h5')
-print("✅ DONE! Saved as cifar10_godmode.h5")
+    outputs = layers.Dense(units=10,activation="softmax",dtype="float32")(x)
+
+    return models.Model(input_tensor,outputs)
+
+resnet_pt = build_pretrained_resnet()
+
+tracker = ReduceLROnPlateau(
+    patience=3,
+    monitor="val_accuracy",
+    factor=0.5,
+    verbose=1
+)
+
+early_stop = EarlyStopping(
+    patience=10,
+    verbose=1,
+    monitor="val_accuracy",
+    restore_best_weights=True
+)
+
+resnet_pt.compile(optimizer=keras.optimizers.Adam(1e-4),loss = "sparse_categorical_crossentropy",metrics=["accuracy"])
+
+resnet_pt.fit(x=train_set,validation_data=test_set,callbacks=[early_stop,tracker],epochs=50)
 
 #PIPELINE
 
